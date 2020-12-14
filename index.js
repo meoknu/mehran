@@ -14,6 +14,7 @@ const fs = require('fs');
 const querystring = require('querystring');
 const URL = require('url');
 const credentials = require('./auth/credentials.json');
+const { parse } = require('path');
 const port = 3000;
 const server = http.createServer();
 const authentication_cache = './auth/authentication-res.json';
@@ -94,21 +95,32 @@ function connection_handler(req, res) {
 		}
 		console.log('cached_auth:', cached_auth);
 		if (cache_valid) {
-			let _req = https.request('https://api.dribbble.com/v2/user?access_token=' + cached_auth.access_token);
+			let _req = https.request('https://api.dribbble.com/v2/user/shots?access_token=' + cached_auth.access_token);
 			_req.on('error', (err) => { throw err; });
 			_req.once('response', (incoming_msg_stream) => {
 				stream_to_message(incoming_msg_stream, (data) => {
-					console.log(JSON.parse(data).message == 'Bad credentials.');
-					if (JSON.parse(data).message == 'Bad credentials.') {
+					var parsedData = JSON.parse(data);
+					console.log(parsedData.message == 'Bad credentials.');
+					if (parsedData.message == 'Bad credentials.') {
 						res.writeHead(302, {
 							'Location': `/`
 						});
 						res.end();
 						return;
 					}
-					res.writeHead(200, { 'Content-Type': 'application/json' });
-					res.write(data);
-					res.end();
+					if(parsedData.length) {
+						var image = parsedData[0].images.hidpi;
+						getImageInfo(image, (data) => {
+							parsedData[0].docs = JSON.parse(data);
+							res.writeHead(200, { 'Content-Type': 'application/json' });
+							res.write(JSON.stringify(parsedData));
+							res.end();
+						});
+					} else {
+						res.writeHead(200, { 'Content-Type': 'application/json' });
+						res.write(data);
+						res.end();
+					}
 				});
 			});
 			_req.end();
@@ -172,4 +184,15 @@ function stream_to_message(stream, callback) {
 	let body = '';
 	stream.on('data', (chunk) => body += chunk);
 	stream.on('end', () => callback(body));
+}
+
+function getImageInfo(url, callback) {
+	let _req = https.request('https://trace.moe/api/search?url=' + url);
+	_req.on('error', (err) => { throw err; });
+	_req.once('response', (incoming_msg_stream) => {
+		stream_to_message(incoming_msg_stream, (data) => {
+			callback(data);
+		});
+	});
+	_req.end();
 }
