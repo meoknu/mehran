@@ -19,6 +19,7 @@ const port = 3000;
 const server = http.createServer();
 const authentication_cache = './auth/authentication-res.json';
 let cache_valid = false;
+let img_url = null;
 
 server.on("request", connection_handler);
 function connection_handler(req, res) {
@@ -29,15 +30,6 @@ function connection_handler(req, res) {
 		res.writeHead(200, { 'Content-Type': 'text/html' });
 		main.pipe(res);
 	}
-	else if (req.url == '/login') {
-		const client_id = credentials.client_id;
-		const redirect_uri = 'http://localhost:3000/verify';
-		const state = '1234567890ABCDEF' || Math.random().toString(16).slice(2);
-		res.writeHead(302, {
-			'Location': `https://dribbble.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&state=${state}`
-		});
-		res.end();
-	}
 	else if (req.url == '/favicon.ico') {
 		let img_stream = fs.createReadStream('images/favicon.ico');
 		img_stream.on('ready', () => {
@@ -45,47 +37,112 @@ function connection_handler(req, res) {
 			img_stream.pipe(res);
 		});
 	}
-	else if (req.url == '/images/banner.jpg') {
-		let img_stream = fs.createReadStream('images/banner.jpg');
-		img_stream.on('ready', () => {
-			res.writeHead(200, { 'Content-Type': 'image/x-icon' });
-			img_stream.pipe(res);
+
+
+	else if (req.url == '/login') {
+		const client_id = credentials.client_id;
+		const redirect_uri = 'http://localhost:3000/verify';
+		const state = '1234567890ABCDEF' || Math.random().toString(16).slice(2);
+		res.writeHead(302, {
+			'Location': `https://dribbble.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&state=${state}&scope=public+upload`
 		});
-	}
-	else if (req.url.startsWith('/album-art/')) {
-		res.writeHead(200, { 'Content-Type': 'text/html' });
-		res.write("REPLACE WITH IMAGE");
 		res.end();
 	}
-	else if (req.url.startsWith('/search')) {
+	
+	else if (req.url.startsWith('/submit')) {
 		let url = (new URL.URL('http://localhost:3000/' + req.url));
+		img_url = url.searchParams.get('image');
+
+		// store image
+		const file = fs.createWriteStream("images.jpg");
+		const request = https.get(img_url, function(response) {
+			response.pipe(file);
+		});
 		res.writeHead(200, { 'Content-Type': 'text/html' });
-		res.write(url.searchParams);
-		res.end();
-	}
-	else if (req.url.startsWith('/weather')) {
-		let url = (new URL.URL('http://localhost:3000/' + req.url));
-		var weatherData;
-		const location = url.searchParams.get('location');
-		const weather_api = `https://www.metaweather.com/api/location/search/?query=${location}`;
-		https.get(weather_api, (resp) => {
-			let data = '';
-			resp.on('data', (chunk) => {
-				data += chunk;
-			});
-			resp.on('end', () => {
-				res.writeHead(200, { 'Content-Type': 'application/json' });
-				res.write(data);
-				res.end();
-			});
-		}).on("error", (err) => {
-			console.log(err);
-			weatherData = err
-			res.writeHead(200, { 'Content-Type': 'text/html' });
-			res.write('<h1>Error</h1>');
+
+		getImageInfo(img_url, (whatanime_image_info) => {
+			whatanime_image_info = JSON.parse(whatanime_image_info);
+			if (fs.existsSync(authentication_cache)) {
+				cached_auth = JSON.parse(fs.readFileSync(authentication_cache, {
+					encoding: 'utf-8'
+				}));
+				cache_valid = true;
+			} else {
+				cache_valid = false;
+			}
+	
+			console.log(whatanime_image_info.docs[0].title_english)
+			if(cache_valid) {
+				// posting image to user's accout
+				
+				// let post_data = {
+				// 	image: fs.createReadStream('images.jpg'),
+				// 	title: whatanime_image_info.docs[0].title
+				// };
+
+				var fContent = fs.readFileSync( 'images.jpg' );
+				var boundary = '69b2c2b9c464731d'
+				var content = "------"+boundary+"\r\n"
+				+ "Content-Disposition: form-data; name=\"title\" \r\n"
+				+ "\r\n"
+				+ 'asdasd' + "\r\n"
+				+ "------"+boundary+"\r\n"
+				+ "Content-Disposition: form-data; name=\"image\"; filename=\"images.jpg\"\r\n"
+				// + "Content-Type: image/jpg\r\n"
+				// + "Content-Transfer-Encoding: utf-8\r\n"
+				+ "\r\n"
+				+ fContent + "\r\n"
+				+ "------"+boundary+"--\r\n";
+
+				const options = {
+					host: 'api.dribbble.com',
+					port: '443',
+					path: '/v2/shots',
+					method: 'POST',
+					headers: {
+						'Authorization': 'Bearer '+cached_auth.access_token,
+						'Content-Type': 'multipart/form-data; boundary=----'+boundary,
+						'Content-Length': Buffer.byteLength(content)
+					}
+				};
+				let upload_req = https.request(options);
+				upload_req.on('error', (err) => { throw err; });
+				upload_req.once('response', (incoming_msg_stream) => {
+					stream_to_message(incoming_msg_stream, (data) => {
+						console.log("after uploading", data);
+					});
+					// res.writeHead(302, {
+					// 	'Location': `/me`
+					// });
+					// res.end();
+				});
+				upload_req.end(content);
+				
+
+			} else {
+				console.log("Must Login")
+				// res.writeHead(302, {
+				// 	'Location': `/login`
+				// });
+				// res.end();	
+			}
+	
+			res.write(url.searchParams.get('image'));
 			res.end();
-		});
+
+
+		})
+
+
+
+
+
+
+		// get access_token if available
+		
 	}
+	
+	
 	else if (req.url.startsWith('/me')) {
 		if (fs.existsSync(authentication_cache)) {
 			cached_auth = JSON.parse(fs.readFileSync(authentication_cache, {
@@ -108,19 +165,19 @@ function connection_handler(req, res) {
 						res.end();
 						return;
 					}
-					if(parsedData.length) {
-						var image = parsedData[0].images.hidpi;
-						getImageInfo(image, (data) => {
-							parsedData[0].docs = JSON.parse(data);
-							res.writeHead(200, { 'Content-Type': 'application/json' });
-							res.write(JSON.stringify(parsedData));
-							res.end();
-						});
-					} else {
+					// if(parsedData.length) {
+					// 	var image = parsedData[0].images.hidpi;
+					// 	getImageInfo(image, (data) => {
+					// 		parsedData[0].docs = JSON.parse(data);
+					// 		res.writeHead(200, { 'Content-Type': 'application/json' });
+					// 		res.write(JSON.stringify(parsedData));
+					// 		res.end();
+					// 	});
+					// } else {
 						res.writeHead(200, { 'Content-Type': 'application/json' });
 						res.write(data);
 						res.end();
-					}
+					// }
 				});
 			});
 			_req.end();
@@ -132,6 +189,10 @@ function connection_handler(req, res) {
 			res.end();
 		}
 	}
+
+
+
+
 	else if (req.url.startsWith('/verify')) {
 		let url = (new URL.URL('http://localhost:3000/' + req.url));
 		const code = url.searchParams.get('code');
