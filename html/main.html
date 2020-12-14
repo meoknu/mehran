@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>Album Art Finder</title>
+		<title>Imgur + WhatAmine</title>
 		<style>
 			body, form{
 				margin: 0 auto;
@@ -21,9 +21,11 @@
 		<!-- <div style="display: block;padding: 50px;">
 			<a href="/login">Login</a>
 		</div> -->
-		<h1>Search Image in your Dribbble Account</h1>
+		<h1>Upload Image in your <a href="https://apidocs.imgur.com/" target="_blank">Imgur</a> Account, with title fetching from <a href="https://soruly.github.io/trace.moe/" target="_blank">Whats Anime</a></h1>
 		<form action="/submit">
-			<input type="text" name="image" id="image">
+			<label for="image">Image Link here
+				<input type="text" name="image" id="image">
+			</label>
 			<input type="submit" value="Submit">
 		</form>
 	</body>

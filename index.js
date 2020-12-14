@@ -44,7 +44,7 @@ function connection_handler(req, res) {
 		const redirect_uri = 'http://localhost:3000/verify';
 		const state = '1234567890ABCDEF' || Math.random().toString(16).slice(2);
 		res.writeHead(302, {
-			'Location': `https://dribbble.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&state=${state}&scope=public+upload`
+			"Location": `https://api.imgur.com/oauth2/authorize?client_id=${client_id}&response_type=code&state=${state}`
 		});
 		res.end();
 	}
@@ -52,13 +52,6 @@ function connection_handler(req, res) {
 	else if (req.url.startsWith('/submit')) {
 		let url = (new URL.URL('http://localhost:3000/' + req.url));
 		img_url = url.searchParams.get('image');
-
-		// store image
-		const file = fs.createWriteStream("images.jpg");
-		const request = https.get(img_url, function(response) {
-			response.pipe(file);
-		});
-		res.writeHead(200, { 'Content-Type': 'text/html' });
 
 		getImageInfo(img_url, (whatanime_image_info) => {
 			whatanime_image_info = JSON.parse(whatanime_image_info);
@@ -70,135 +63,60 @@ function connection_handler(req, res) {
 			} else {
 				cache_valid = false;
 			}
-	
-			console.log(whatanime_image_info.docs[0].title_english)
 			if(cache_valid) {
-				// posting image to user's accout
-				
-				// let post_data = {
-				// 	image: fs.createReadStream('images.jpg'),
-				// 	title: whatanime_image_info.docs[0].title
-				// };
-
-				var fContent = fs.readFileSync( 'images.jpg' );
-				var boundary = '69b2c2b9c464731d'
-				var content = "------"+boundary+"\r\n"
-				+ "Content-Disposition: form-data; name=\"title\" \r\n"
-				+ "\r\n"
-				+ 'asdasd' + "\r\n"
-				+ "------"+boundary+"\r\n"
-				+ "Content-Disposition: form-data; name=\"image\"; filename=\"images.jpg\"\r\n"
-				// + "Content-Type: image/jpg\r\n"
-				// + "Content-Transfer-Encoding: utf-8\r\n"
-				+ "\r\n"
-				+ fContent + "\r\n"
-				+ "------"+boundary+"--\r\n";
-
+				const token_endpoint = 'https://api.imgur.com/3/image';
 				const options = {
-					host: 'api.dribbble.com',
-					port: '443',
-					path: '/v2/shots',
 					method: 'POST',
 					headers: {
-						'Authorization': 'Bearer '+cached_auth.access_token,
-						'Content-Type': 'multipart/form-data; boundary=----'+boundary,
-						'Content-Length': Buffer.byteLength(content)
+						'Content-Type': 'application/x-www-form-urlencoded',
+						"Authorization": "Bearer "+cached_auth.access_token
 					}
 				};
-				let upload_req = https.request(options);
-				upload_req.on('error', (err) => { throw err; });
-				upload_req.once('response', (incoming_msg_stream) => {
+				let imgur_req = https.request(token_endpoint, options);
+				imgur_req.on('error', (err) => { throw err; });
+				imgur_req.once('response', (incoming_msg_stream) => {
 					stream_to_message(incoming_msg_stream, (data) => {
-						console.log("after uploading", data);
+						_data = JSON.parse(data);
+						if(res.status = 200) {
+							res.writeHead(302, {
+								'Content-Type': `text/html`
+							});
+							res.write(`Uploaded <a href='${_data.data.link}' target="_blank">${_data.data.title}</a>`);
+							res.end();
+						} else {
+							res.writeHead(302, {
+								'Location': `/login`
+							});
+							res.end();	
+						}
 					});
-					// res.writeHead(302, {
-					// 	'Location': `/me`
-					// });
-					// res.end();
 				});
-				upload_req.end(content);
-				
-
+				let post_data = querystring.stringify({
+					image: img_url,
+					name: whatanime_image_info.docs[0].title_english,
+					title: whatanime_image_info.docs[0].title_english
+				});
+				console.log(post_data)
+				imgur_req.end(post_data);
 			} else {
-				console.log("Must Login")
-				// res.writeHead(302, {
-				// 	'Location': `/login`
-				// });
-				// res.end();	
-			}
-	
-			res.write(url.searchParams.get('image'));
-			res.end();
-
-
-		})
-
-
-
-
-
-
-		// get access_token if available
-		
-	}
-	
-	
-	else if (req.url.startsWith('/me')) {
-		if (fs.existsSync(authentication_cache)) {
-			cached_auth = JSON.parse(fs.readFileSync(authentication_cache, {
-				encoding: 'utf-8'
-			}));
-			cache_valid = true;
-		}
-		console.log('cached_auth:', cached_auth);
-		if (cache_valid) {
-			let _req = https.request('https://api.dribbble.com/v2/user/shots?access_token=' + cached_auth.access_token);
-			_req.on('error', (err) => { throw err; });
-			_req.once('response', (incoming_msg_stream) => {
-				stream_to_message(incoming_msg_stream, (data) => {
-					var parsedData = JSON.parse(data);
-					console.log(parsedData.message == 'Bad credentials.');
-					if (parsedData.message == 'Bad credentials.') {
-						res.writeHead(302, {
-							'Location': `/`
-						});
-						res.end();
-						return;
-					}
-					// if(parsedData.length) {
-					// 	var image = parsedData[0].images.hidpi;
-					// 	getImageInfo(image, (data) => {
-					// 		parsedData[0].docs = JSON.parse(data);
-					// 		res.writeHead(200, { 'Content-Type': 'application/json' });
-					// 		res.write(JSON.stringify(parsedData));
-					// 		res.end();
-					// 	});
-					// } else {
-						res.writeHead(200, { 'Content-Type': 'application/json' });
-						res.write(data);
-						res.end();
-					// }
+				res.writeHead(302, {
+					'Location': `/login`
 				});
-			});
-			_req.end();
-		}
-		else {
-			res.writeHead(302, {
-				'Location': `/login`
-			});
-			res.end();
-		}
+				res.end();	
+			}
+		})
 	}
-
-
-
 
 	else if (req.url.startsWith('/verify')) {
+
 		let url = (new URL.URL('http://localhost:3000/' + req.url));
 		const code = url.searchParams.get('code');
-		const token_endpoint = 'https://dribbble.com/oauth/token';
+		const token_endpoint = 'https://api.imgur.com/oauth2/token';
 		const options = {
-			method: 'POST'
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded'
+			}
 		};
 		let auth_req = https.request(token_endpoint, options);
 		auth_req.on('error', (err) => { throw err; });
@@ -213,8 +131,9 @@ function connection_handler(req, res) {
 			code: code,
 			client_id: credentials.client_id,
 			client_secret: credentials.client_secret,
-			redirect_uri: 'http://localhost:3000/verify'
+			grant_type: 'authorization_code'
 		});
+		console.log(post_data)
 		auth_req.end(post_data);
 	}
 	else {
