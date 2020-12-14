@@ -77,7 +77,8 @@ function connection_handler(req, res) {
 				imgur_req.once('response', (incoming_msg_stream) => {
 					stream_to_message(incoming_msg_stream, (data) => {
 						_data = JSON.parse(data);
-						if(res.status = 200) {
+						console.log("-------- API CALL : Response (Imgur) : ", _data);
+						if(_data.status == 200) {
 							res.writeHead(302, {
 								'Content-Type': `text/html`
 							});
@@ -91,13 +92,13 @@ function connection_handler(req, res) {
 						}
 					});
 				});
-				let post_data = querystring.stringify({
+				let post_data = {
 					image: img_url,
 					name: whatanime_image_info.docs[0].title_english,
 					title: whatanime_image_info.docs[0].title_english
-				});
-				console.log(post_data)
-				imgur_req.end(post_data);
+				};
+				console.log("-------- API CALL : Request (Imgur) : ", post_data);
+				imgur_req.end(querystring.stringify(post_data));
 			} else {
 				res.writeHead(302, {
 					'Location': `/login`
@@ -123,7 +124,7 @@ function connection_handler(req, res) {
 		auth_req.once('response', (incoming_msg_stream) => {
 			stream_to_message(incoming_msg_stream, received_auth);
 			res.writeHead(302, {
-				'Location': `/me`
+				'Location': `/`
 			});
 			res.end();
 		});
@@ -167,10 +168,12 @@ function stream_to_message(stream, callback) {
 }
 
 function getImageInfo(url, callback) {
+	console.log("-------- API CALL : Request (WhatAnime) : ", { url: url });
 	let _req = https.request('https://trace.moe/api/search?url=' + url);
 	_req.on('error', (err) => { throw err; });
 	_req.once('response', (incoming_msg_stream) => {
 		stream_to_message(incoming_msg_stream, (data) => {
+			console.log("-------- API CALL : Response (WhatAnime) : ", JSON.parse(data));
 			callback(data);
 		});
 	});
